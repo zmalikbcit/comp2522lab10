@@ -1,5 +1,7 @@
 package ca.bcit.comp2522.quizapp;
 
+import javafx.animation.KeyFrame;
+import javafx.animation.Timeline;
 import javafx.application.Application;
 import javafx.scene.Scene;
 import javafx.scene.control.Button;
@@ -8,6 +10,7 @@ import javafx.scene.control.TextField;
 import javafx.scene.input.KeyCode;
 import javafx.scene.layout.VBox;
 import javafx.stage.Stage;
+import javafx.util.Duration;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -22,7 +25,9 @@ import java.util.List;
  * presents 10 random questions to the user, tracks the score,
  * and displays a summary of missed questions at the end.
  *
- * @author COMP2522
+ * @author Ziad Malik
+ * @author Jiahao Zhu
+ *
  * @version 1.0
  */
 public class QuizApp extends Application
@@ -31,6 +36,20 @@ public class QuizApp extends Application
     private static final int    SCENE_WIDTH_PX         = 500;
     private static final int    SCENE_HEIGHT_PX        = 400;
     private static final int    QUESTION_ANSWER_PARTS  = 2;
+    private static final int    FOR_LOOP_INIT_ZERO     = 0;
+    private static final int    QUESTION_INDEX_INIT    = 0;
+    private static final int    SCORE_INIT             = 0;
+    private static final int    ADD_OF_QUESTION_INDEX  = 1;
+    private static final int    PARTS_OF_ZERO          = 0;
+    private static final int    PARTS_OF_ONE           = 1;
+    private static final int    QUESTION_INDEX_ZERO    = 0;
+    private static final int    QUESTION_INDEX_ONE     = 1;
+    private static final int    MISSED_OF_INDEX_ZERO   = 0;
+    private static final int    MISSED_OF_INDEX_ONE    = 1;
+    private static final int    TIMER_SECONDS          = 15;
+    private static final int    TIMER_INTERVAL_SECONDS = 1;
+    private static final int    TIMER_EXPIRED          = 0;
+    private static final String TIMER_LABEL_FORMAT     = "Time: %ds";
     private static final String QUIZ_FILE_NAME         = "quiz.txt";
     private static final String STYLESHEET_FILE_NAME   = "styles.css";
     private static final String PIPE_DELIMITER         = "\\|";
@@ -39,12 +58,15 @@ public class QuizApp extends Application
     private final List<String[]> selectedQuestions;
     private final List<String[]> missedQuestions;
 
+    private Label    timerLabel;
     private Label     questionLabel;
     private Label     scoreLabel;
     private TextField answerField;
     private Button    submitButton;
     private Button    startButton;
+    private Timeline countdown;
 
+    private int      timeRemaining;
     private int currentQuestionIndex;
     private int score;
 
@@ -81,6 +103,7 @@ public class QuizApp extends Application
 
         questionLabel = new Label("Welcome to the Quiz App!");
         scoreLabel    = new Label("Score: 0 / " + TOTAL_QUESTIONS);
+        timerLabel    = new Label(String.format(TIMER_LABEL_FORMAT, TIMER_SECONDS));
         answerField   = new TextField();
         submitButton  = new Button("Submit");
         startButton   = new Button("Start Quiz");
@@ -101,7 +124,7 @@ public class QuizApp extends Application
         });
 
         final VBox root;
-        root = new VBox(questionLabel, answerField, submitButton, startButton, scoreLabel);
+        root = new VBox(questionLabel, timerLabel, answerField, submitButton, startButton, scoreLabel);
 
         final Scene scene;
         scene = new Scene(root, SCENE_WIDTH_PX, SCENE_HEIGHT_PX);
@@ -147,7 +170,7 @@ public class QuizApp extends Application
 
                     if(parts.length == QUESTION_ANSWER_PARTS)
                     {
-                        allQuestions.add(new String[]{parts[0].trim(), parts[1].trim()});
+                        allQuestions.add(new String[]{parts[PARTS_OF_ZERO].trim(), parts[PARTS_OF_ONE].trim()});
                     }
                 }
 
@@ -173,13 +196,13 @@ public class QuizApp extends Application
         shuffled = new ArrayList<>(allQuestions);
         Collections.shuffle(shuffled);
 
-        for(int i = 0; i < TOTAL_QUESTIONS && i < shuffled.size(); i++)
+        for(int i = FOR_LOOP_INIT_ZERO; i < TOTAL_QUESTIONS && i < shuffled.size(); i++)
         {
             selectedQuestions.add(shuffled.get(i));
         }
 
-        currentQuestionIndex = 0;
-        score                = 0;
+        currentQuestionIndex = QUESTION_INDEX_INIT;
+        score                = SCORE_INIT;
 
         scoreLabel.setText("Score: 0 / " + TOTAL_QUESTIONS);
         answerField.setDisable(false);
@@ -200,9 +223,53 @@ public class QuizApp extends Application
         currentQuestion = selectedQuestions.get(currentQuestionIndex);
 
         final int displayNumber;
-        displayNumber = currentQuestionIndex + 1;
+        displayNumber = currentQuestionIndex + ADD_OF_QUESTION_INDEX;
 
-        questionLabel.setText("Q" + displayNumber + ": " + currentQuestion[0]);
+        questionLabel.setText("Q" + displayNumber + ": " + currentQuestion[QUESTION_INDEX_ZERO]);
+        startTimer();
+    }
+
+    /**
+     * Starts a countdown timer for the current question.
+     * Resets the timer to the maximum allowed seconds and decrements
+     * every second. If time expires before the user submits,
+     * the answer is automatically submitted as empty and marked incorrect.
+     * Any previously running timer is stopped before starting a new one.
+     */
+    private void startTimer()
+    {
+        stopTimer();
+
+        timeRemaining = TIMER_SECONDS;
+        timerLabel.setText(String.format(TIMER_LABEL_FORMAT, timeRemaining));
+
+        countdown = new Timeline(new KeyFrame(Duration.seconds(TIMER_INTERVAL_SECONDS), event ->
+        {
+            timeRemaining--;
+            timerLabel.setText(String.format(TIMER_LABEL_FORMAT, timeRemaining));
+
+            if(timeRemaining <= TIMER_EXPIRED)
+            {
+                stopTimer();
+                submitAnswer();
+            }
+        }));
+
+        countdown.setCycleCount(Timeline.INDEFINITE);
+        countdown.play();
+    }
+
+    /**
+     * Stops the currently running countdown timer, if one exists.
+     * Resets the timer label to display zero seconds remaining.
+     */
+    private void stopTimer()
+    {
+        if(countdown != null)
+        {
+            countdown.stop();
+        }
+        timerLabel.setText(String.format(TIMER_LABEL_FORMAT, TIMER_EXPIRED));
     }
 
     /**
@@ -225,7 +292,7 @@ public class QuizApp extends Application
         currentQuestion = selectedQuestions.get(currentQuestionIndex);
 
         final String correctAnswer;
-        correctAnswer = currentQuestion[1];
+        correctAnswer = currentQuestion[QUESTION_INDEX_ONE];
 
         if(userAnswer.equalsIgnoreCase(correctAnswer))
         {
@@ -257,6 +324,8 @@ public class QuizApp extends Application
      */
     private void endQuiz()
     {
+        stopTimer();
+
         answerField.setDisable(true);
         submitButton.setDisable(true);
         startButton.setDisable(false);
@@ -280,9 +349,9 @@ public class QuizApp extends Application
             for(final String[] missed : missedQuestions)
             {
                 summary.append("Q: ")
-                        .append(missed[0])
+                        .append(missed[MISSED_OF_INDEX_ZERO])
                         .append(" -> A: ")
-                        .append(missed[1])
+                        .append(missed[MISSED_OF_INDEX_ONE])
                         .append("\n");
             }
         }
